@@ -96,7 +96,8 @@ def detect_encoding(file_path):
         encoding = result['encoding']
         confidence = result['confidence']
         return encoding, confidence
-    
+
+#Function to add a geographic bounding box  
 def create_bounding_box(lat, lon, delta=0.1):
     """Create a bounding box around a point."""
     return {
@@ -104,6 +105,17 @@ def create_bounding_box(lat, lon, delta=0.1):
         "east": lon + delta,
         "south": lat - delta,
         "north": lat + delta
+    }
+
+def generate_bounding_box(points):
+    """Create a bounding box around multiple points."""
+    lats = [point[0] for point in points]
+    lons = [point[1] for point in points]
+    return {
+        "west": min(lons),
+        "east": max(lons),
+        "south": min(lats),
+        "north": max(lats)
     }
 
 
@@ -207,5 +219,32 @@ def geobox():
 
     return render_template('index.html', bounding_box=bounding_box, map_html=map_html)
 
+@app.route('/geobox_multiple', methods=['GET', 'POST'])
+def geobox_multiple():
+    bounding_box_multiple = None
+    map_html_multiple = None
+
+    if request.method == 'POST':
+        coordinates_input = request.form['coordinates']  # Expecting a comma-separated list of lat,lon
+        coordinates_list = [tuple(map(float, coord.split(','))) for coord in coordinates_input.split(';')]
+
+        if coordinates_list:
+            bounding_box_multiple = generate_bounding_box(coordinates_list)
+
+            # Create a map with the bounding box
+            m = folium.Map(location=[(bounding_box_multiple['north'] + bounding_box_multiple['south']) / 2, 
+                                      (bounding_box_multiple['east'] + bounding_box_multiple['west']) / 2], zoom_start=10)
+            folium.Rectangle(
+                bounds=[[bounding_box_multiple['south'], bounding_box_multiple['west']],
+                        [bounding_box_multiple['north'], bounding_box_multiple['east']]],
+                color='blue',
+                fill=True,
+                fill_opacity=0.2
+            ).add_to(m)
+
+            map_html_multiple = m._repr_html_()
+
+    return render_template('index.html', bounding_box_multiple=bounding_box_multiple, map_html_multiple=map_html_multiple)
+    
 if __name__ == '__main__':
     app.run(debug=True)
