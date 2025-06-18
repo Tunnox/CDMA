@@ -63,6 +63,7 @@
             padding: 10px;
             margin: 10px 0;
             border: 1px solid #abb1a3;
+            background-color: #e5ebdf;
             border-radius: 4px;
         }
         button {
@@ -106,6 +107,46 @@
             border: 1px solid #01374d; /* Optional: adds a border for visibility */
             border-radius: 5px; /* Optional: rounded corners */
             background-color: #01374d; /* Optional: light background */
+        }
+        .West-box{
+            display: flex;
+            width: 70%;
+            margin: 1px;
+            background-color: #8fcce4;
+            color:  white;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .East-box{
+            display: flex;
+            width: 70%;
+            margin: 1px;
+            background-color: #56a0bd;
+            color:  white;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .South-box{
+            display: flex;
+            width: 70%;
+            margin: 1px;
+            background-color: #286983;
+            color:  white;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .North-box{
+            display: flex;
+            width: 70%;
+            margin: 1px;
+            background-color: #01374d;
+            color:  white;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .Map_viewer{
+            border: 5px solid #01374d;
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -217,7 +258,7 @@
     <p>This batch copies files from a spreadsheet that contains file paths and folder paths<br> to a designated folder location</p>
 </section>
 <section>
-    <h2>Bounding Box Generator</h2>
+    <h2>Bounding Box Generator (Single Point)</h2>
     <form method="POST" action="/geobox">
         <label for="coordinates">Enter Geographic location (Place Name or any form of coordinates):</label>
         <input type="text" id="coordinates" name="coordinates" placeholder = "Geographic Location" required>
@@ -225,17 +266,62 @@
     </form>
 
     {% if bounding_box %}
-        <h2>Bounding Box:</h2>
-        <p>West: {{ bounding_box.west }}</p>
-        <p>East: {{ bounding_box.east }}</p>
-        <p>South: {{ bounding_box.south }}</p>
-        <p>North: {{ bounding_box.north }}</p>
+        <h2>Bounding Box (In Latitude and Longitude):</h2>
+        <div class="West-box">
+        <p>West Limit: {{ bounding_box.west }}</p>
+        </div>
+        <div class="East-box">
+        <p>East Limit: {{ bounding_box.east }}</p>
+        </div>
+        <div class="South-box">
+        <p>South Limit: {{ bounding_box.south }}</p>
+        </div>
+        <div class="North-box">
+        <p>North Limit: {{ bounding_box.north }}</p>
+        </div>
     {% endif %}
 
     {% if map_html %}
         <h2>Map Viewer:</h2>
-        <div>{{ map_html|safe }}</div>
+        <div class="Map_viewer">{{ map_html|safe }}</div>
     {% endif %}
+
+</section>
+
+<section>
+    <h2>Bounding Box Generator (Multiple Points)</h2>
+        <form method="POST" action="/geobox_multiple" class="mt-4">
+            <div class="form-group">
+                <label for="coordinates">Enter Coordinates (lat,lon;lat,lon;...):</label>
+                <input type="text" class="form-control" id="coordinates" name="coordinates" placeholder="lat,lon;lat,lon;..." required>
+            </div>
+            <button type="submit" class="btn btn-primary">Generate Bounding Box</button>
+        </form>
+
+        {% if bounding_box_multiple %}
+            <h2 class="mt-5">Bounding Box Coordinates:</h2>
+            <div class="West-box">
+            <p>West: {{ bounding_box_multiple['west'] }}</p>
+            </div>
+            <div class="East-box">
+            <p>East: {{ bounding_box_multiple['east'] }}</p>
+            </div>
+            <div class="South-box">
+            <p>South: {{ bounding_box_multiple['south'] }}</p>
+            </div>
+            <div class="North-box">
+            <p>North: {{ bounding_box_multiple['north'] }}</p>
+            </div>
+        {% endif %}
+
+        {% if map_html_multiple %}
+            <h2 class="mt-5">Map:</h2>
+            <div class="Map_viewer">{{ map_html_multiple|safe }}</div>
+        {% endif %}
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </section>
     <script>
         function countText() {
