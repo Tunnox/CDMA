@@ -6,9 +6,12 @@ import json
 import pandas as pd
 from werkzeug.utils import secure_filename
 import chardet
+import folium
+import geopy
+from geopy.geocoders import Nominatim
 
 app = Flask(__name__)
-
+geolocator = Nominatim(user_agent="bounding_box_app")
 
 def generate_folder_report(folder_path):
     file_count = 0
@@ -93,6 +96,16 @@ def detect_encoding(file_path):
         encoding = result['encoding']
         confidence = result['confidence']
         return encoding, confidence
+    
+def create_bounding_box(lat, lon, delta=0.1):
+    """Create a bounding box around a point."""
+    return {
+        "west": lon - delta,
+        "east": lon + delta,
+        "south": lat - delta,
+        "north": lat + delta
+    }
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -157,8 +170,6 @@ def paths_generator(folder_path):
         df.to_excel(excel_path, index=False)  # Save DataFrame to Excel
         return f"Excel file saved to {excel_path}"
     
-
-
     return "Invalid folder path!"
 
 @app.route('/generate', methods=['GET', 'POST'])
@@ -168,6 +179,33 @@ def generate():
         if 'generate' in request.form:
             alart_message = paths_generator(folder_path)
             return render_template('index.html', alart_message=alart_message)
+
+@app.route('/geobox', methods=['GET', 'POST'])
+def geobox():
+    bounding_box = None
+    map_html = None
+
+    if request.method == 'POST':
+        location_input = request.form['coordinates']
+        location = geolocator.geocode(location_input)
+
+        if location:
+            lat, lon = location.latitude, location.longitude
+            bounding_box = create_bounding_box(lat, lon)
+
+            # Create a map with the bounding box
+            m = folium.Map(location=[lat, lon], zoom_start=10)
+            folium.Rectangle(
+                bounds=[[bounding_box['south'], bounding_box['west']],
+                        [bounding_box['north'], bounding_box['east']]],
+                color='blue',
+                fill=True,
+                fill_opacity=0.2
+            ).add_to(m)
+
+            map_html = m._repr_html_()
+
+    return render_template('index.html', bounding_box=bounding_box, map_html=map_html)
 
 if __name__ == '__main__':
     app.run(debug=True)
