@@ -76,7 +76,7 @@ def generate_folder_report(folder_path):
             report["Folder Structure Issues"].append(f"Empty folders: {len(empty_folders)}")
         if corrupt_files:
             report["Folder Structure Issues"].append(f"Corrupt files: {len(corrupt_files)}")
-    
+
     return report
 
 # Function to convert JSON to CSV
