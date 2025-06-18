@@ -6,13 +6,22 @@
     <title>CDMA</title>
     <style>
         body {
+            max-width: 1200px; /* Limit the width of the page */
             font-family: Arial, sans-serif;
-            background-color: #dfe9d3;
-            margin: 0;
+            margin: 0 auto;
             padding: 20px;
+            background: linear-gradient(45deg, #a1a898, #dfe9d3);
+            animation: gradient 15s ease infinite;
         }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         .Header {
-            background-color: #01435e;
+            background-color: #dfe9d3;
             padding: 20px;
             color: rgb(255, 255, 255);
             text-align: center;
@@ -43,7 +52,12 @@
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease; /* Smooth transition */
         }
+        section:hover {
+            background-color: #b8c5a8; /* Color when hovered */
+        }
+
         h2 {
             color: #014357;
             margin-bottom: 15px;
@@ -151,19 +165,20 @@
     </style>
 </head>
 <body>
-    <section>
-    <div class="Header">
-        <h1>Free os tools </h1>
-        <h3>Chukwuemeka Umunna</h3>
-        <p>Use any of these simple tools for every day task</p>
-    </div>
-    </section>
         <nav>
+        <div class="Header">
+        <h1>Free tools </h1>
+        <h3>Chuk</h3>
+        <p>Use any of these simple tools for every day task</p>
+        </div>
+        <div>
+            <br>
         <a href="#folder-reporting">Folder Reporting</a>
         <a href="#text-counter">Text Counter</a>
         <a href="#json-to-csv">JSON to CSV Converter</a>
         <a href="#file-paths-generator">File and Folder Paths Generator</a>
         <a href="#batch-copy-file">Batch Copy File</a>
+        </div>
     </nav>
     <section>
         <h2>Folder Reporting</h2>
