@@ -45,7 +45,7 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
         h2 {
-            color: #5bc0de;
+            color: #014357;
             margin-bottom: 15px;
         }
         h3 {
@@ -217,7 +217,25 @@
     <p>This batch copies files from a spreadsheet that contains file paths and folder paths<br> to a designated folder location</p>
 </section>
 <section>
-    <h2></h2>
+    <h2>Bounding Box Generator</h2>
+    <form method="POST" action="/geobox">
+        <label for="coordinates">Enter Geographic location (Place Name or any form of coordinates):</label>
+        <input type="text" id="coordinates" name="coordinates" placeholder = "Geographic Location" required>
+        <button type="submit">Generate Bounding Box</button>
+    </form>
+
+    {% if bounding_box %}
+        <h2>Bounding Box:</h2>
+        <p>West: {{ bounding_box.west }}</p>
+        <p>East: {{ bounding_box.east }}</p>
+        <p>South: {{ bounding_box.south }}</p>
+        <p>North: {{ bounding_box.north }}</p>
+    {% endif %}
+
+    {% if map_html %}
+        <h2>Map Viewer:</h2>
+        <div>{{ map_html|safe }}</div>
+    {% endif %}
 </section>
     <script>
         function countText() {
