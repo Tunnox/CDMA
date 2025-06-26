@@ -13,6 +13,7 @@ from geopy.geocoders import Nominatim
 app = Flask(__name__)
 geolocator = Nominatim(user_agent="bounding_box_app")
 
+#Functions list
 def generate_folder_report(folder_path):
     file_count = 0
     total_size = 0
