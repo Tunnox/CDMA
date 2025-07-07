@@ -11,6 +11,8 @@ import geopy
 from geopy.geocoders import Nominatim
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
+import psycopg2
+import psycopg2.extras
 
 app = Flask(__name__)
 geolocator = Nominatim(user_agent="bounding_box_app")
@@ -344,6 +346,160 @@ def leave_balance():
             result = "Invalid input. Please enter valid numbers."
 
     return render_template('index.html', leave=result)
+
+def get_db_connection():
+    return psycopg2.connect(
+        dbname='AGT',
+        user='postgres',
+        password='pgsqtk116chuk95',
+        host='chukspace.ctiuisa62ks5.eu-north-1.rds.amazonaws.com',
+        port='5432'
+    )
+
+# Fetch data for dashboard
+def get_sample_data():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Tasks
+    cur.execute('SELECT title, status FROM "CDMA".tasks ORDER BY id')
+    tasks = [{'title': row['title'], 'status': row['status']} for row in cur.fetchall()]
+
+    # Issues
+    cur.execute('SELECT id, description, status FROM "CDMA".issues ORDER BY id')
+    issues = [{'id': row['id'], 'description': row['description'], 'status': row['status']} for row in cur.fetchall()]
+
+    # Events
+    cur.execute('SELECT title, start FROM "CDMA".calendar_events ORDER BY start')
+    events = [{'title': row['title'], 'start': row['start'].isoformat()} for row in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+    return tasks, issues, events
+
+# Dashboard route
+@app.route('/manager')
+def manager():
+    tasks, issues, events = get_sample_data()
+    return render_template('index.html', tasks=tasks, issues=issues, events=events)
+
+# -----------------------------
+# EVENT ROUTES
+# -----------------------------
+@app.route('/events', methods=['GET'])
+def get_events():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute('SELECT title, start FROM "CDMA".calendar_events ORDER BY start')
+    events = [{'title': row['title'], 'start': row['start'].isoformat()} for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return jsonify(events)
+
+@app.route('/add_event', methods=['POST'])
+def add_event():
+    data = request.get_json()
+    title = data.get('title')
+    start = data.get('start')
+    if not title or not start:
+        return jsonify({'status': 'error', 'message': 'Missing data'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO "CDMA".calendar_events (title, start) VALUES (%s, %s)', (title, start))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success', 'event': {'title': title, 'start': start}}), 201
+
+# -----------------------------
+# TASK ROUTES
+# -----------------------------
+@app.route('/add_task', methods=['POST'])
+def add_task():
+    data = request.get_json()
+    title = data.get('title')
+    status = data.get('status')
+    if not title or not status:
+        return jsonify({'status': 'error', 'message': 'Missing task data'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO "CDMA".tasks (title, status) VALUES (%s, %s)', (title, status))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success', 'task': {'title': title, 'status': status}}), 201
+
+# -----------------------------
+# ISSUE ROUTES
+# -----------------------------
+@app.route('/add_issue', methods=['POST'])
+def add_issue():
+    data = request.get_json()
+    description = data.get('description')
+    status = data.get('status')
+    if not description or not status:
+        return jsonify({'status': 'error', 'message': 'Missing issue data'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        'INSERT INTO "CDMA".issues (description, status) VALUES (%s, %s) RETURNING id',
+        (description, status)
+    )
+    issue_id = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({
+        'status': 'success',
+        'issue': {'id': issue_id, 'description': description, 'status': status}
+    }), 201
+    
+@app.route('/delete_task/<int:task_id>', methods=['DELETE'])
+def delete_task(task_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM "CDMA".tasks WHERE id = %s', (task_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+# NEW: Hide/Delete Issue
+@app.route('/delete_issue/<int:issue_id>', methods=['DELETE'])
+def delete_issue(issue_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM "CDMA".issues WHERE id = %s', (issue_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+# NEW: Add Achievement
+@app.route('/add_achievement', methods=['POST'])
+def add_achievement():
+    data = request.get_json()
+    required_fields = ['task', 'description', 'project', 'manager', 'date_started', 'date_ended', 'status', 'comment']
+    if not all(data.get(f) for f in required_fields):
+        return jsonify({'status': 'error', 'message': 'Missing achievement data'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('''
+        INSERT INTO "CDMA".achievements 
+        (task, description, project, project_manager, date_started, date_ended, completion_status, comment)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ''', (
+        data['task'], data['description'], data['project'], data['manager'],
+        data['date_started'], data['date_ended'], data['status'], data['comment']
+    ))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
     app.run(debug=True)
