@@ -331,8 +331,6 @@ def Excel_reporter():
             report = run_excel_qa(file_path)
     return render_template("index.html", excel_report=report)
 
-app = Flask(__name__)
-
 @app.route('/leave_balance', methods=['GET', 'POST'])
 def leave_balance():
     result = None
