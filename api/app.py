@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
 from collections import defaultdict
-import datetime
+from datetime import datetime
 import json
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -9,9 +9,81 @@ import chardet
 import folium
 import geopy
 from geopy.geocoders import Nominatim
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 geolocator = Nominatim(user_agent="bounding_box_app")
+#Excel Reporting
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def run_excel_qa(file_path):
+    report_lines = []
+    
+    # File info
+    file_name = os.path.basename(file_path)
+    file_ext = os.path.splitext(file_path)[1]
+    file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
+    last_modified = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+
+    report_lines.append(f"File Name: {file_name}")
+    report_lines.append(f"File Extension: {file_ext}")
+    report_lines.append(f"File Size: {file_size_mb} MB")
+    report_lines.append(f"Last Modified: {last_modified}\n")
+
+    wb = load_workbook(file_path, data_only=True)
+
+    for sheet in wb.worksheets:
+        sheet_name = sheet.title
+        is_hidden = sheet.sheet_state != 'visible'
+        display_name = f"{sheet_name} (hidden)" if is_hidden else sheet_name
+        report_lines.append(f"Sheet: {display_name}")
+
+        df = pd.DataFrame(sheet.values)
+        num_rows, num_cols = df.shape
+        report_lines.append(f"  - Total Rows: {num_rows}")
+        report_lines.append(f"  - Total Columns: {num_cols}")
+
+        # Empty cells
+        empty_cells = []
+        for r in range(1, num_rows + 1):
+            for c in range(1, num_cols + 1):
+                value = sheet.cell(row=r, column=c).value
+                if value in [None, "", " "]:
+                    cell_name = f"{get_column_letter(c)}{r}"
+                    empty_cells.append(cell_name)
+        report_lines.append(f"  - Empty Cells: {', '.join(empty_cells) if empty_cells else 'None'}")
+
+        # Hidden columns
+        hidden_columns = []
+        for col_cells in sheet.iter_cols():
+            col_letter = get_column_letter(col_cells[0].column)
+            if sheet.column_dimensions[col_letter].hidden:
+                hidden_columns.append(col_letter)
+        report_lines.append(f"  - Hidden Columns: {', '.join(hidden_columns) if hidden_columns else 'None'}")
+
+        # Data quality
+        quality_issues = []
+        for col in df.columns:
+            col_series = df[col].dropna()
+            if col_series.empty:
+                quality_issues.append(f"    - Column {get_column_letter(col + 1)} is completely empty")
+            elif col_series.nunique() == 1 and col_series.iloc[0] in [None, "", " "]:
+                quality_issues.append(f"    - Column {get_column_letter(col + 1)} has uniform missing value")
+            elif col_series.apply(type).nunique() > 1:
+                quality_issues.append(f"    - Column {get_column_letter(col + 1)} has mixed data types")
+        if quality_issues:
+            report_lines.append("  - Data Quality Issues:")
+            report_lines.extend(quality_issues)
+        else:
+            report_lines.append("  - Data Quality Issues: None")
+        report_lines.append("")
+
+    return "\n".join(report_lines)
 
 #Functions list
 def generate_folder_report(folder_path):
@@ -57,7 +129,7 @@ def generate_folder_report(folder_path):
     
     report = {
         "Folder Name": folder_name,
-        "Hidden Folders": {"Count": len(hidden_folders), "Names": hidden_folders},
+        "Hidden_Folders": {"Count": len(hidden_folders), "Names": hidden_folders},
         "Creation Date": datetime.datetime.fromtimestamp(folder_creation_time).strftime('%Y-%m-%d %H:%M:%S'),
         "Last Modified Date": datetime.datetime.fromtimestamp(folder_last_modified_time).strftime('%Y-%m-%d %H:%M:%S'),
         "Total Files": file_count,
@@ -126,7 +198,7 @@ def index():
     if request.method == 'POST':
         folder_path = request.form['folder_path']
         report = generate_folder_report(folder_path)
-    return render_template('index.html', report=report)
+    return render_template('index.html', folder_report=report)
 
 @app.route('/count', methods=['POST'])
 def count():
@@ -246,6 +318,34 @@ def geobox_multiple():
             map_html_multiple = m._repr_html_()
 
     return render_template('index.html', bounding_box_multiple=bounding_box_multiple, map_html_multiple=map_html_multiple)
-    
+
+@app.route("/Excel_reporting", methods=["GET", "POST"])
+def Excel_reporter():
+    report = None
+    if request.method == "POST":
+        uploaded_file = request.files["excel_file"]
+        if uploaded_file and uploaded_file.filename.endswith((".xlsx", ".xls")):
+            filename = secure_filename(uploaded_file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            uploaded_file.save(file_path)
+            report = run_excel_qa(file_path)
+    return render_template("index.html", excel_report=report)
+
+app = Flask(__name__)
+
+@app.route('/leave_balance', methods=['GET', 'POST'])
+def leave_balance():
+    result = None
+    if request.method == 'POST':
+        try:
+            total_hours = float(request.form['total_hours'])
+            daily_hours = float(request.form['daily_hours'])
+            days_left = total_hours / daily_hours
+            result = round(days_left, 2)
+        except (ValueError, ZeroDivisionError):
+            result = "Invalid input. Please enter valid numbers."
+
+    return render_template('index.html', leave=result)
+
 if __name__ == '__main__':
     app.run(debug=True)
