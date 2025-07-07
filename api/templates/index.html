@@ -162,6 +162,41 @@
             border: 5px solid #01374d;
             border-radius: 10px;
         }
+        .output-box {
+            background-color: #abb1a3;
+            border: 1px solid #030303;
+            padding: 20px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            max-height: 600px;
+            position: relative;
+            margin-top: 20px;
+            border-radius: 8px;
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            cursor: pointer;
+            font-size: 20px;
+            font-weight: bold;
+            color: #900;
+        }
+        .output-box.hidden {
+            display: none;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .result {
+            font-weight: bold;
+            margin-top: 20px;
+            font-size: 18px;
+            color: #2b2b2b;
+        }
     </style>
 </head>
 <body>
@@ -181,13 +216,13 @@
     </nav>
     <section>
         <h2>Folder Reporting</h2>
-        <form method="POST">
+        <form method="POST" action="/folder_report">
             <label for="folder_path">Folder Path:</label>
             <input type="text" id="folder_path" name="folder_path" placeholder= " Copy-Paste folder path" required>
             <br><button type="submit">Generate Report</button>
             <button type="button" onclick="clearReport()">Clear Report</button>
         </form>
-        {% if report %}
+        {% if folder_report %}
             <div class="report">
                 <h2>Report:</h2>
                 <div class="report-item"><strong>Folder Name:</strong> {{ report['Folder Name'] }}</div>
@@ -201,7 +236,7 @@
                 <div class="report-item"><strong>Empty Folders:</strong> {{ report['Empty Folders'] | length }}</div>
                 <div class="report-item"><strong>Corrupt Files:</strong> {{ report['Corrupt Files'] | length }}</div>
                 <div class="report-item"><strong>Folder Structure Issues:</strong> {{ report['Folder Structure Issues'] | join(', ') }}</div>
-                <div class="report-item"><strong>Hidden Folders:</strong> {{ report['Hidden Folders']['Count'] }} - {{ report['Hidden Folders']['Names'] | join(', ') }}</div>
+                <div class="report-item"><strong>Hidden Folders:</strong> {{ report['Hidden_Folders']['Count'] }} - {{ report['Hidden_Folders']['Names'] | join(', ') }}</div>
              <div class="file-types">
                 <strong>File Types:</strong>
                 {% for ext, files in report['File Types'].items() %}
@@ -336,6 +371,42 @@
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</section>
+<section>
+    <h2>Excel QA Report Generator</h2>
+    <form method="post" action="/Excel_reporting" enctype="multipart/form-data">
+        <label>Select Excel File:</label>
+        <input type="file" name="excel_file" required>
+        <button type="submit">Generate QA Report</button>
+    </form>
+
+    {% if excel_report %}
+    <div class="output-box" id="report-box">
+        <span class="close-btn" onclick="document.getElementById('report-box').classList.add('hidden')">&times;</span>
+        {{ excel_report }}
+    </div>
+    {% endif %}
+</section>
+<section>
+    <h2>Annual Leave Days Calculator</h2>
+        <form method="post" action="/leave_balance">
+            <label>Total Leave Hours:</label>
+            <input type="number" step="0.01" name="total_hours" required>
+            
+            <label>Daily Work Hours:</label>
+            <input type="number" step="0.01" name="daily_hours" required>
+
+            <button type="submit">Calculate</button>
+        </form>
+        {% if leave is not none %}
+            <div class="result">
+                {% if leave is string %}
+                    {{ result }}
+                {% else %}
+                    You have approximately {{ result }} days of leave left.
+                {% endif %}
+            </div>
+        {% endif %}
 </section>
     <script>
         function countText() {
