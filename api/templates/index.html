@@ -196,19 +196,20 @@
   <!-- Main Content -->
   <div class="main-content">
     <section id="home" class="active">
-      <p class="lead">Chukwuemeka Umunna</p>
+      <p class="lead"><strong>Chukwuemeka Umunna</strong></p>
+      <p>Grants Data Steward</p>
       <h2>My Dashboard</h2>
 
     <!-- Tabs Navigation -->
     <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
       <li class="nav-item">
-        <a class="nav-link active" id="tasks-tab" data-toggle="tab" href="#tasks" role="tab">To-Do</a>
+        <a class="nav-link active" id="tasks-tab" data-toggle="tab" href="#tasks" role="tab">Upcoming Task</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" id="issues-tab" data-toggle="tab" href="#issues" role="tab">Issues</a>
+        <a class="nav-link" id="issues-tab" data-toggle="tab" href="#issues" role="tab">Issues Register</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" id="calendar-tab" data-toggle="tab" href="#calendar" role="tab">Calendar</a>
+        <a class="nav-link" id="calendar-tab" data-toggle="tab" href="#calendar" role="tab">My-Calendar</a>
       </li>
       <li class="nav-item">
         <a class="nav-link" id="achievements-tab" data-toggle="tab" href="#achievements" role="tab">Achievements</a>
@@ -272,7 +273,7 @@
 
       <!-- Calendar Tab -->
       <div class="tab-pane fade" id="calendar" role="tabpanel">
-        <h3 class="mt-3">Calendar</h3>
+        <h3 class="mt-3">My-Calendar</h3>
 
         <form id="calendarForm" class="form-inline mb-3">
           <input type="datetime-local" class="form-control mr-2" id="eventDateTime" required />
@@ -367,22 +368,128 @@
       <h2>Batch Copy File</h2>
       <p>Copies files from a spreadsheet with file paths to designated folders.</p>
     </section>
+<!-- Bounding box single point section -->
+<section id="bbox-single">
+  <h2>Bounding Box Generator (Single Point)</h2>
 
-    <section id="bbox-single">
-      <h2>Bounding Box Generator (Single Point)</h2>
-      <form method="POST" action="/geobox">
-        <input type="text" name="coordinates" placeholder="Place or Coordinates" required />
-        <button type="submit">Generate</button>
-      </form>
-    </section>
+  <input type="text" id="coordinates" placeholder="Enter location">
+  <button onclick="submitCoordinates()">Generate</button>
+
+  <div id="map-container" style="margin-top: 20px;"></div>
+
+  <!-- Bounding Box Info Will Be Injected Here -->
+  <div id="bbox-list" class="bbox-container"></div>
+
+  <style>
+    .bbox-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .bbox-item {
+      padding: 10px;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+    }
+
+    .west { background-color: #1abc9c; }   /* Teal */
+    .east { background-color: #3498db; }   /* Blue */
+    .south { background-color: #e67e22; }  /* Orange */
+    .north { background-color: #9b59b6; }  /* Purple */
+  </style>
+
+  <script>
+    function submitCoordinates() {
+      const coordinates = document.getElementById('coordinates').value;
+
+      fetch('/geobox', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ coordinates: coordinates })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.bounding_box) {
+                const bbox = data.bounding_box;
+                const bboxList = `
+                  <div class="bbox-item west">West Limit: ${bbox.west}</div>
+                  <div class="bbox-item east">East Limit: ${bbox.east}</div>
+                  <div class="bbox-item south">South Limit: ${bbox.south}</div>
+                  <div class="bbox-item north">North Limit: ${bbox.north}</div>
+                `;
+                document.getElementById('bbox-list').innerHTML = bboxList;
+            } else {
+                console.warn('Bounding box not returned in response.');
+            }
+          if (data.error) {
+              alert(data.error);
+          } else {
+              // Show the map
+              document.getElementById('map-container').innerHTML = data.map_html;
+          }
+      })
+      .catch(error => {
+          console.error('Error:', error);
+      });
+    }
+  </script>
+</section>
 
     <section id="bbox-multi">
-      <h2>Bounding Box Generator (Multiple Points)</h2>
-      <form method="POST" action="/geobox_multiple">
-        <input type="text" name="coordinates" placeholder="lat,lon;lat,lon;..." required />
-        <button type="submit">Generate</button>
-      </form>
-    </section>
+  <h2>Bounding Box Generator (Multiple Points)</h2>
+
+  <input type="text" id="multi-coordinates" placeholder="lat,lon;lat,lon;..." required />
+  <button onclick="submitMultipleCoordinates()">Generate</button>
+
+  <div id="multi-map-container" style="margin-top: 20px;"></div>
+
+  <!-- Bounding Box Info Will Be Injected Here -->
+  <div id="multi-bbox-list" class="bbox-container"></div>
+
+  <script>
+    function submitMultipleCoordinates() {
+      const coordinates = document.getElementById('multi-coordinates').value;
+
+      fetch('/geobox_multiple', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ coordinates: coordinates })
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.bounding_box) {
+              const bbox = data.bounding_box;
+              const bboxList = `
+                <div class="bbox-item west">West Limit: ${bbox.west}</div>
+                <div class="bbox-item east">East Limit: ${bbox.east}</div>
+                <div class="bbox-item south">South Limit: ${bbox.south}</div>
+                <div class="bbox-item north">North Limit: ${bbox.north}</div>
+              `;
+              document.getElementById('multi-bbox-list').innerHTML = bboxList;
+          } else {
+              console.warn('Bounding box not returned in response.');
+          }
+
+          if (data.error) {
+              alert(data.error);
+          } else {
+              document.getElementById('multi-map-container').innerHTML = data.map_html;
+          }
+      })
+      .catch(error => {
+          console.error('Error:', error);
+      });
+    }
+  </script>
+</section>
+
 
     <section id="excel-qa">
       <h2>Excel QA Report Generator</h2>
