@@ -13,6 +13,8 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 import psycopg2
 import psycopg2.extras
+import io
+import base64
 
 app = Flask(__name__)
 geolocator = Nominatim(user_agent="bounding_box_app")
@@ -267,59 +269,69 @@ def generate():
             alart_message = paths_generator(folder_path)
             return render_template('index.html', alart_message=alart_message)
 
-@app.route('/geobox', methods=['GET', 'POST'])
+@app.route('/geobox', methods=['POST'])
 def geobox():
-    bounding_box = None
-    map_html = None
+    location_input = request.json['coordinates']
+    location = geolocator.geocode(location_input)
 
-    if request.method == 'POST':
-        location_input = request.form['coordinates']
-        location = geolocator.geocode(location_input)
+    if not location:
+        return jsonify({'error': 'Location not found'}), 404
 
-        if location:
-            lat, lon = location.latitude, location.longitude
-            bounding_box = create_bounding_box(lat, lon)
+    lat, lon = location.latitude, location.longitude
+    bounding_box = create_bounding_box(lat, lon)
 
-            # Create a map with the bounding box
-            m = folium.Map(location=[lat, lon], zoom_start=10)
-            folium.Rectangle(
-                bounds=[[bounding_box['south'], bounding_box['west']],
-                        [bounding_box['north'], bounding_box['east']]],
-                color='blue',
-                fill=True,
-                fill_opacity=0.2
-            ).add_to(m)
+    # Create a map with the bounding box
+    m = folium.Map(location=[lat, lon], zoom_start=10)
+    folium.Rectangle(
+        bounds=[[bounding_box['south'], bounding_box['west']],
+                [bounding_box['north'], bounding_box['east']]],
+        color='blue',
+        fill=True,
+        fill_opacity=0.2
+    ).add_to(m)
 
-            map_html = m._repr_html_()
+    map_html = m._repr_html_()
 
-    return render_template('index.html', bounding_box=bounding_box, map_html=map_html)
+    return jsonify({
+        'bounding_box': bounding_box,
+        'map_html': map_html
+    })
 
-@app.route('/geobox_multiple', methods=['GET', 'POST'])
+@app.route('/geobox_multiple', methods=['POST'])
 def geobox_multiple():
-    bounding_box_multiple = None
-    map_html_multiple = None
+    data = request.get_json()
+    coordinates_input = data.get('coordinates')  # Expecting a string like "lat1,lon1;lat2,lon2;..."
 
-    if request.method == 'POST':
-        coordinates_input = request.form['coordinates']  # Expecting a comma-separated list of lat,lon
+    try:
         coordinates_list = [tuple(map(float, coord.split(','))) for coord in coordinates_input.split(';')]
+    except Exception:
+        return jsonify({'error': 'Invalid coordinates format'}), 400
 
-        if coordinates_list:
-            bounding_box_multiple = generate_bounding_box(coordinates_list)
+    if not coordinates_list:
+        return jsonify({'error': 'No coordinates provided'}), 400
 
-            # Create a map with the bounding box
-            m = folium.Map(location=[(bounding_box_multiple['north'] + bounding_box_multiple['south']) / 2, 
-                                      (bounding_box_multiple['east'] + bounding_box_multiple['west']) / 2], zoom_start=10)
-            folium.Rectangle(
-                bounds=[[bounding_box_multiple['south'], bounding_box_multiple['west']],
-                        [bounding_box_multiple['north'], bounding_box_multiple['east']]],
-                color='blue',
-                fill=True,
-                fill_opacity=0.2
-            ).add_to(m)
+    bounding_box_multiple = generate_bounding_box(coordinates_list)
 
-            map_html_multiple = m._repr_html_()
+    # Create a map with the bounding box
+    m = folium.Map(
+        location=[(bounding_box_multiple['north'] + bounding_box_multiple['south']) / 2, 
+                  (bounding_box_multiple['east'] + bounding_box_multiple['west']) / 2],
+        zoom_start=10
+    )
+    folium.Rectangle(
+        bounds=[[bounding_box_multiple['south'], bounding_box_multiple['west']],
+                [bounding_box_multiple['north'], bounding_box_multiple['east']]],
+        color='blue',
+        fill=True,
+        fill_opacity=0.2
+    ).add_to(m)
 
-    return render_template('index.html', bounding_box_multiple=bounding_box_multiple, map_html_multiple=map_html_multiple)
+    map_html_multiple = m._repr_html_()
+
+    return jsonify({
+        'bounding_box': bounding_box_multiple,
+        'map_html': map_html_multiple
+    })
 
 @app.route("/Excel_reporting", methods=["GET", "POST"])
 def Excel_reporter():
