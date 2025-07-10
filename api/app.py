@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
 from collections import defaultdict
+from datetime import datetime
 import datetime
 import json
 import pandas as pd
@@ -18,44 +19,87 @@ import base64
 import tempfile
 import shutil
 import zipfile
+from io import StringIO, BytesIO
+import csv
+import math
 
 app = Flask(__name__)
 geolocator = Nominatim(user_agent="bounding_box_app")
+safe_math = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
+safe_math.update({'abs': abs, 'round': round, 'pow': pow})
+
+#Functions list
 #Excel Reporting
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+# Allowed extensions
+ALLOWED_EXTENSIONS = ('.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv')
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+def allowed_file(filename):
+    return '.' in filename and filename.lower().endswith(ALLOWED_EXTENSIONS)
 
-def run_excel_qa(file_path):
-    report_lines = []
-    
-    # File info
-    file_name = os.path.basename(file_path)
-    file_ext = os.path.splitext(file_path)[1]
-    file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
-    last_modified = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+def run_excel_qa(file_stream, filename):
+    report_data = []
+    file_ext = os.path.splitext(filename)[1].lower()
+    file_size_mb = round(len(file_stream.getvalue()) / (1024 * 1024), 2)
+    last_modified = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    report_lines.append(f"File Name: {file_name}")
-    report_lines.append(f"File Extension: {file_ext}")
-    report_lines.append(f"File Size: {file_size_mb} MB")
-    report_lines.append(f"Last Modified: {last_modified}\n")
+    report_data.append({
+        "section": "File Info",
+        "details": {
+            "File Name": filename,
+            "File Extension": file_ext,
+            "File Size (MB)": file_size_mb,
+            "Last Modified": last_modified
+        }
+    })
 
-    wb = load_workbook(file_path, data_only=True)
+    if file_ext == '.csv':
+        df = pd.read_csv(io.BytesIO(file_stream.getvalue()))
+        sheet_report = {"Sheet": "CSV File"}
 
+        num_rows, num_cols = df.shape
+        sheet_report["Total Rows"] = num_rows
+        sheet_report["Total Columns"] = num_cols
+
+        # Empty cells
+        empty_cells = []
+        for r in range(df.shape[0]):
+            for c in range(df.shape[1]):
+                val = df.iat[r, c]
+                if pd.isna(val) or str(val).strip() == "":
+                    cell_name = f"{get_column_letter(c + 1)}{r + 1}"
+                    empty_cells.append(cell_name)
+        sheet_report["Empty Cells"] = empty_cells if empty_cells else ["None"]
+        sheet_report["Hidden Columns"] = ["N/A (CSV does not support hidden columns)"]
+
+        # Data quality
+        quality_issues = []
+        for col in df.columns:
+            col_series = df[col].dropna()
+            if col_series.empty:
+                quality_issues.append(f"Column {col} is completely empty")
+            elif col_series.nunique() == 1 and str(col_series.iloc[0]).strip() == "":
+                quality_issues.append(f"Column {col} has uniform missing value")
+            elif col_series.apply(type).nunique() > 1:
+                quality_issues.append(f"Column {col} has mixed data types")
+        sheet_report["Data Quality Issues"] = quality_issues if quality_issues else ["None"]
+
+        report_data.append({"section": "CSV File", "details": sheet_report})
+        return report_data
+
+    # Handle Excel files (.xls, .xlsx, etc.)
+    wb = load_workbook(filename=io.BytesIO(file_stream.getvalue()), data_only=True)
     for sheet in wb.worksheets:
+        sheet_report = {}
         sheet_name = sheet.title
         is_hidden = sheet.sheet_state != 'visible'
         display_name = f"{sheet_name} (hidden)" if is_hidden else sheet_name
-        report_lines.append(f"Sheet: {display_name}")
+        sheet_report["Sheet"] = display_name
 
         df = pd.DataFrame(sheet.values)
         num_rows, num_cols = df.shape
-        report_lines.append(f"  - Total Rows: {num_rows}")
-        report_lines.append(f"  - Total Columns: {num_cols}")
+        sheet_report["Total Rows"] = num_rows
+        sheet_report["Total Columns"] = num_cols
 
-        # Empty cells
         empty_cells = []
         for r in range(1, num_rows + 1):
             for c in range(1, num_cols + 1):
@@ -63,36 +107,35 @@ def run_excel_qa(file_path):
                 if value in [None, "", " "]:
                     cell_name = f"{get_column_letter(c)}{r}"
                     empty_cells.append(cell_name)
-        report_lines.append(f"  - Empty Cells: {', '.join(empty_cells) if empty_cells else 'None'}")
+        sheet_report["Empty Cells"] = empty_cells if empty_cells else ["None"]
 
-        # Hidden columns
         hidden_columns = []
         for col_cells in sheet.iter_cols():
             col_letter = get_column_letter(col_cells[0].column)
             if sheet.column_dimensions[col_letter].hidden:
                 hidden_columns.append(col_letter)
-        report_lines.append(f"  - Hidden Columns: {', '.join(hidden_columns) if hidden_columns else 'None'}")
+        sheet_report["Hidden Columns"] = hidden_columns if hidden_columns else ["None"]
 
-        # Data quality
         quality_issues = []
         for col in df.columns:
             col_series = df[col].dropna()
             if col_series.empty:
-                quality_issues.append(f"    - Column {get_column_letter(col + 1)} is completely empty")
+                quality_issues.append(f"Column {get_column_letter(col + 1)} is completely empty")
             elif col_series.nunique() == 1 and col_series.iloc[0] in [None, "", " "]:
-                quality_issues.append(f"    - Column {get_column_letter(col + 1)} has uniform missing value")
+                quality_issues.append(f"Column {get_column_letter(col + 1)} has uniform missing value")
             elif col_series.apply(type).nunique() > 1:
-                quality_issues.append(f"    - Column {get_column_letter(col + 1)} has mixed data types")
-        if quality_issues:
-            report_lines.append("  - Data Quality Issues:")
-            report_lines.extend(quality_issues)
-        else:
-            report_lines.append("  - Data Quality Issues: None")
-        report_lines.append("")
+                quality_issues.append(f"Column {get_column_letter(col + 1)} has mixed data types")
+        sheet_report["Data Quality Issues"] = quality_issues if quality_issues else ["None"]
 
-    return "\n".join(report_lines)
+        report_data.append({
+            "section": display_name,
+            "details": sheet_report
+        })
 
-#Functions list
+    return report_data
+
+
+########################################################################
 # Report generator
 def generate_folder_report(folder_path):
     file_count = 0
@@ -156,6 +199,7 @@ def generate_folder_report(folder_path):
             report["Folder Structure Issues"].append(f"Corrupt files: {len(corrupt_files)}")
 
     return report
+################################################################################
 # Function to convert JSON to CSV
 # Function to convert JSON file object to a CSV and return path
 def json_to_csv(file):
@@ -167,7 +211,7 @@ def json_to_csv(file):
     df.to_csv(temp_csv.name, index=False)
     return temp_csv.name
 
-
+#######################################################################################
 # Function to detect file encoding
 def detect_encoding(file_path):
     with open(file_path, 'rb') as file:
@@ -177,6 +221,29 @@ def detect_encoding(file_path):
         confidence = result['confidence']
         return encoding, confidence
 
+########################################################################################
+#Function to generate folder and file paths
+def scan_directory(folder_path):
+    entries = []
+    for root, dirs, files in os.walk(folder_path):
+        for dir_name in dirs:
+            entries.append({
+                "Name": dir_name,
+                "Path": os.path.join(root, dir_name),
+                "Type": "Folder",
+                "Extension": ""
+            })
+        for file_name in files:
+            full_path = os.path.join(root, file_name)
+            _, ext = os.path.splitext(file_name)
+            entries.append({
+                "Name": file_name,
+                "Path": full_path,
+                "Type": "File",
+                "Extension": ext
+            })
+    return entries
+########################################################################################
 #Function to add a geographic bounding box  
 def create_bounding_box(lat, lon, delta=0.1):
     """Create a bounding box around a point."""
@@ -198,7 +265,8 @@ def generate_bounding_box(points):
         "north": max(lats)
     }
 
-
+########################################################################################
+#App Routs
 @app.route('/', methods=['GET', 'POST'])
 def index():
     report = {}
@@ -246,14 +314,67 @@ def folder_report():
     finally:
         shutil.rmtree(temp_dir)
 
+##################################################################################
+#Folder and file paths generator
+@app.route("/upload_folder", methods=["POST"])
+def upload_folder():
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "No files uploaded"}), 400
 
-@app.route('/generate', methods=['GET', 'POST'])
-def generate():
-    if request.method == 'POST':
-        folder_path = request.form['folder_path']
-        if 'generate' in request.form:
-            alart_message = paths_generator(folder_path)
-            return render_template('index.html', alart_message=alart_message)
+    entries = []
+    seen_folders = set()
+
+    for file in files:
+        rel_path = file.filename.replace("\\", "/")
+        folder_path, file_name = os.path.split(rel_path)
+        _, ext = os.path.splitext(file_name)
+
+        # Add parent folders recursively
+        folder_parts = folder_path.split("/")
+        for i in range(1, len(folder_parts) + 1):
+            subfolder_path = "/".join(folder_parts[:i])
+            if subfolder_path and subfolder_path not in seen_folders:
+                seen_folders.add(subfolder_path)
+                entries.append({
+                    "Name": folder_parts[i - 1],
+                    "Path": subfolder_path,
+                    "Type": "Folder",
+                    "Extension": ""
+                })
+
+        # Add file
+        entries.append({
+            "Name": file_name,
+            "Path": rel_path,
+            "Type": "File",
+            "Extension": ext
+        })
+
+    # Sort by path for structure clarity
+    entries.sort(key=lambda x: x["Path"])
+    return jsonify(entries)
+
+@app.route("/download_csv", methods=["POST"])
+def download_csv():
+    data = request.get_json()
+    if not data or not isinstance(data, list):
+        return jsonify({"error": "Invalid data"}), 400
+
+    # Prepare CSV in-memory
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["Name", "Path", "Type", "Extension"])
+    writer.writeheader()
+    writer.writerows(data)
+    output.seek(0)
+
+    return send_file(
+        io.BytesIO(output.getvalue().encode()),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name="folder_contents.csv"
+    )
+##################################################################################
 
 @app.route('/geobox', methods=['POST'])
 def geobox():
@@ -319,32 +440,32 @@ def geobox_multiple():
         'map_html': map_html_multiple
     })
 
-@app.route("/Excel_reporting", methods=["GET", "POST"])
+@app.route("/Excel_reporting", methods=["POST"])
 def Excel_reporter():
-    report = None
-    if request.method == "POST":
-        uploaded_file = request.files["excel_file"]
-        if uploaded_file and uploaded_file.filename.endswith((".xlsx", ".xls")):
-            filename = secure_filename(uploaded_file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            uploaded_file.save(file_path)
-            report = run_excel_qa(file_path)
-    return render_template("index.html", excel_report=report)
+    if "excel_file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    uploaded_file = request.files["excel_file"]
 
-@app.route('/leave_balance', methods=['GET', 'POST'])
-def leave_balance():
-    result = None
-    if request.method == 'POST':
-        try:
-            total_hours = float(request.form['total_hours'])
-            daily_hours = float(request.form['daily_hours'])
-            days_left = total_hours / daily_hours
-            result = round(days_left, 2)
-        except (ValueError, ZeroDivisionError):
-            result = "Invalid input. Please enter valid numbers."
+    if uploaded_file and allowed_file(uploaded_file.filename):
+        file_stream = io.BytesIO(uploaded_file.read())
+        filename = secure_filename(uploaded_file.filename)
+        report = run_excel_qa(file_stream, filename)
+        return jsonify(report)
+    else:
+        return jsonify({"error": "Invalid file type"}), 400
+    
+@app.route('/calculate', methods=['POST'])
+def calculate():
+    data = request.get_json()
+    expression = data.get('expression', '')
 
-    return render_template('index.html', leave=result)
-
+    try:
+        result = eval(expression, {"__builtins__": {}}, safe_math)
+        return jsonify({'result': result})
+    except Exception as e:
+        return jsonify({'error': 'Invalid expression'}), 400
+    
+    
 def get_db_connection():
     return psycopg2.connect(
         dbname='AGT',
@@ -501,4 +622,3 @@ def add_achievement():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
