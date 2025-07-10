@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
 from collections import defaultdict
-from datetime import datetime
+import datetime
 import json
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -15,6 +15,9 @@ import psycopg2
 import psycopg2.extras
 import io
 import base64
+import tempfile
+import shutil
+import zipfile
 
 app = Flask(__name__)
 geolocator = Nominatim(user_agent="bounding_box_app")
@@ -90,6 +93,7 @@ def run_excel_qa(file_path):
     return "\n".join(report_lines)
 
 #Functions list
+# Report generator
 def generate_folder_report(folder_path):
     file_count = 0
     total_size = 0
@@ -97,40 +101,37 @@ def generate_folder_report(folder_path):
     empty_folders = []
     corrupt_files = []
     hidden_folders = []
-    
-    # Get folder name and path
+
     folder_name = os.path.basename(folder_path)
     folder_creation_time = os.path.getctime(folder_path)
     folder_last_modified_time = os.path.getmtime(folder_path)
-    
+
     for dirpath, dirnames, filenames in os.walk(folder_path):
-        # Check for hidden folders
         for dirname in dirnames:
             if dirname.startswith('.'):
                 hidden_folders.append(dirname)
-        
+
         if not filenames and not dirnames:
             empty_folders.append(dirpath)
-        
+
         for filename in filenames:
             file_count += 1
             _, ext = os.path.splitext(filename)
-            file_types[ext].append(f"{filename} ({dirpath})")  # Updated to include folder path
-            
+            file_types[ext].append(f"{filename} ({dirpath})")
+
             file_path = os.path.join(dirpath, filename)
             total_size += os.path.getsize(file_path)
-            
+
             try:
                 with open(file_path, 'rb') as f:
                     f.read(1)
             except Exception:
                 corrupt_files.append(file_path)
-    
-    # Convert sizes
+
     size_kb = total_size / 1024
     size_mb = size_kb / 1024
     size_gb = size_mb / 1024
-    
+
     report = {
         "Folder Name": folder_name,
         "Hidden_Folders": {"Count": len(hidden_folders), "Names": hidden_folders},
@@ -141,12 +142,12 @@ def generate_folder_report(folder_path):
         "Total Size (KB)": size_kb,
         "Total Size (MB)": size_mb,
         "Total Size (GB)": size_gb,
-        "File Types": {ext: files for ext, files in file_types.items()},
+        "File Types": dict(file_types),
         "Empty Folders": empty_folders,
         "Corrupt Files": corrupt_files,
         "Folder Structure Issues": []
     }
-    
+
     if empty_folders or corrupt_files:
         report["Folder Structure Issues"].append("Issues found:")
         if empty_folders:
@@ -155,15 +156,17 @@ def generate_folder_report(folder_path):
             report["Folder Structure Issues"].append(f"Corrupt files: {len(corrupt_files)}")
 
     return report
-
 # Function to convert JSON to CSV
-def json_to_csv(json_file):
-    with open(json_file, 'r', encoding='utf-8') as file:
-        data = json.load(file)
+# Function to convert JSON file object to a CSV and return path
+def json_to_csv(file):
+    data = json.load(file)
     df = pd.json_normalize(data)
-    csv_file_path = os.path.splitext(json_file)[0] + '.csv'
-    df.to_csv(csv_file_path, index=False)
-    return f"CSV file saved at: {csv_file_path}"
+
+    # Create a temporary file to store CSV
+    temp_csv = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode='w', newline='', encoding='utf-8')
+    df.to_csv(temp_csv.name, index=False)
+    return temp_csv.name
+
 
 # Function to detect file encoding
 def detect_encoding(file_path):
@@ -211,55 +214,38 @@ def count():
     char_count = len(text)
     return jsonify({'words': word_count, 'characters': char_count})
 
-@app.route('/convert', methods=['GET', 'POST'])
-def convert():
-    if request.method == 'POST':
-        json_file_path = request.form['file_path']
-        if 'convert' in request.form:
-            message = json_to_csv(json_file_path)
-            return render_template('index.html', message=message)
-        elif 'decode' in request.form:
-            encoding, confidence = detect_encoding(json_file_path)
-            return render_template('index.html', encoding=encoding, confidence=confidence)
-    return render_template('index.html')
+# Endpoint to receive ZIP file and return folder report
+@app.route('/folder_report', methods=['POST'])
+def folder_report():
+    if 'folder_zip' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
 
+    zip_file = request.files['folder_zip']
+    if zip_file.filename == '' or not zip_file.filename.endswith('.zip'):
+        return jsonify({'error': 'Invalid file type. Only ZIP files allowed.'}), 400
 
-def paths_generator(folder_path):
-    folder_path = request.form['folder_path']
-    data = []
-    # Check if the folder exists
-    if os.path.exists(folder_path) and os.path.isdir(folder_path):
-        for root, dirs, files in os.walk(folder_path):
-            for dir_name in dirs:
-                folder_name = dir_name
-                folder_full_path = os.path.join(root, dir_name)
-                data.append({
-                    'Folder_Name': folder_name,
-                    'File_Name': '',
-                    'Folder_Path': folder_full_path,
-                    'File_Path': '',
-                    'File_Extension': ''
-                })
-            for file_name in files:
-                file_full_path = os.path.join(root, file_name)
-                file_extension = os.path.splitext(file_name)[1]
-                data.append({
-                    'Folder_Name': '',
-                    'File_Name': file_name,
-                    'Folder_Path': root,
-                    'File_Path': file_full_path,
-                    'File_Extension': file_extension
-                })
+    # Extract ZIP to temp directory
+    temp_dir = tempfile.mkdtemp()
+    try:
+        zip_path = os.path.join(temp_dir, zip_file.filename)
+        zip_file.save(zip_path)
 
-        # Create DataFrame
-        df = pd.DataFrame(data)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
 
-        # Save DataFrame to Excel
-        excel_path = os.path.join(folder_path, "Paths_Generated.xlsx")  # Corrected file name
-        df.to_excel(excel_path, index=False)  # Save DataFrame to Excel
-        return f"Excel file saved to {excel_path}"
-    
-    return "Invalid folder path!"
+        # Find root folder in ZIP
+        extracted_folders = [f.path for f in os.scandir(temp_dir) if f.is_dir()]
+        if not extracted_folders:
+            return jsonify({'error': 'No folders found in ZIP file.'}), 400
+
+        report = generate_folder_report(extracted_folders[0])
+        return jsonify(report)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        shutil.rmtree(temp_dir)
+
 
 @app.route('/generate', methods=['GET', 'POST'])
 def generate():
@@ -515,3 +501,4 @@ def add_achievement():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
