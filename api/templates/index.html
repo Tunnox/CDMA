@@ -331,13 +331,42 @@
    </div>
       </section>
 
-    <section id="folder-reporting">
-      <h2>Folder Reporting</h2>
-      <form method="POST" action="/folder_report">
-        <input type="text" name="folder_path" placeholder="Paste folder path" required />
-        <button type="submit">Generate Report</button>
-      </form>
-    </section>
+<section id="folder-reporting">
+  <h2>Folder Reporting</h2>
+  <form id="folderForm" enctype="multipart/form-data">
+    <input type="file" name="folder_zip" accept=".zip" required />
+    <button type="submit">Generate Report</button>
+  </form>
+  <pre id="reportOutput"></pre>
+
+  <script>
+    const folderUploadForm = document.getElementById('folderForm');
+const reportOutput = document.getElementById('reportOutput');
+
+folderUploadForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(folderUploadForm);
+  reportOutput.textContent = 'Generating report...';
+
+  try {
+    const response = await fetch('/folder_report', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      reportOutput.textContent = `Error: ${data.error}`;
+    } else {
+      reportOutput.textContent = JSON.stringify(data, null, 2);
+    }
+  } catch (error) {
+    reportOutput.textContent = 'An unexpected error occurred.';
+  }
+});
+  </script>
+</section>
 
     <section id="text-counter">
       <h2>Text Counter</h2>
@@ -349,12 +378,53 @@
     </section>
 
     <section id="json-csv">
-      <h2>JSON to CSV Converter</h2>
-      <form action="/convert" method="POST">
-        <input type="text" name="file_path" placeholder="Json file path" required />
-        <button type="submit" name="convert">Convert</button>
-      </form>
-    </section>
+  <h2>JSON to CSV Converter</h2>
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".json" required />
+    <button type="submit">Convert & Download</button>
+  </form>
+
+  <p id="status"></p>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const status = document.getElementById('status');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      
+      status.textContent = "Converting...";
+
+      try {
+        const response = await fetch('/convert', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          status.textContent = `Error: ${errorData.error}`;
+          return;
+        }
+
+        // Trigger download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'converted.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        status.textContent = "Download complete.";
+      } catch (error) {
+        status.textContent = "Error during conversion.";
+      }
+    });
+  </script>
+</section>
 
     <section id="path-generator">
       <h2>File & Folder Paths Generator</h2>
