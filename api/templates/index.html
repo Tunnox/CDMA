@@ -216,6 +216,7 @@
   <div class="nav-links">
     <button onclick="switchPrimary('home')">🏠 Home</button>
     <button id="toolsBtn" onmouseenter="revealSidebar('tools')">🛠️ Tools</button>
+    <button id="dataBtn" onmouseenter="revealSidebar('data')">📦 Data Management</button>
     <button id="aboutBtn" onmouseenter="revealSidebar('about')">👤 About Me</button>
   </div>
 </div>
@@ -1026,6 +1027,68 @@
   });
 </script>
 
+<!--END fo Tools-->
+<!-- DATA MANAGEMENT SECTIONS -->
+
+<section id="dm-planning">
+  <h2>📝 Data Management Planning</h2>
+  <p>
+    A Data Management Plan (DMP) should include: data types, metadata standards, storage & backup procedures, data sharing policies, privacy & ethics considerations, and long-term preservation strategy.
+  </p>
+  <ul>
+    <li>Types of data to be collected or created</li>
+    <li>Standards and metadata to be used</li>
+    <li>Policies for access and sharing</li>
+    <li>Plans for archiving and preservation</li>
+    <li>Data security and ethical/legal compliance</li>
+  </ul>
+</section>
+
+<section id="dm-quality">
+  <h2>📊 Data Quality Checking</h2>
+  <p>Use this checklist to ensure your data quality:</p>
+  <ul>
+    <li>Is the data in machine-readable format (CSV, JSON, etc.)?</li>
+    <li>Are there missing or null values?</li>
+    <li>Is data type consistent across columns?</li>
+    <li>Are date/time fields properly formatted?</li>
+    <li>Do categorical fields contain only allowed values?</li>
+    <li>Any duplicates present?</li>
+  </ul>
+</section>
+
+<section id="dm-metadata">
+  <h2>🏷️ Metadata Guidance</h2>
+  <form id="metadataForm">
+    <label>What is the dataset? for example "Cehmical concentrations","Crustal Thickness Estimates"</label><br>
+    <input type="text" id="metaWhat"><br>
+    <label>From where is it taken? for example "stream sediments", "Seismic Refraction Profiles"</label><br>
+    <input type="text" id="metaSource"><br>
+    <label>What location was it captured? for example "Australia", "Central Asia"</label><br>
+    <input type="text" id="metaWhere"><br>
+    <label>What is the temporal extent? "2024-2025", "2024"</label><br>
+    <input type="text" id="metaWhen"><br>
+    <br>
+    <button type="button" onclick="generateMetadataTitle()">Generate Metadata Title</button>
+  </form>
+  <h3 id="metaTitle" style="margin-top:20px; color:green;"></h3>
+  <h3 id="meta2Title" style="margin-top:20px; color:green;"></h3>
+</section>
+
+<section id="dm-practices">
+  <h2>🌟 Best Practices in Data Management</h2>
+  <ul>
+    <li>Use consistent naming conventions and folder structures</li>
+    <li>Always document metadata alongside datasets</li>
+    <li>Automate backups and version control (e.g., Git, DVC)</li>
+    <li>Encrypt sensitive data</li>
+    <li>Validate data formats and structure regularly</li>
+    <li>Ensure compliance with data policies and licenses</li>
+  </ul>
+</section>
+
+<!--End of Data management-->
+
   <section id="my-cv">
     <h2>My CV</h2>
     <p>[Professional CV template will appear here.]</p>
@@ -1050,22 +1113,29 @@
 
 <script>
   const secondaryMenu = {
-    tools: [
-      { id: 'folder-reporting', label: '📁 Folder Reporting' },
-      { id: 'text-counter', label: '🔤 Text Counter' },
-      { id: 'json-csv', label: '🔄 JSON to CSV' },
-      { id: 'path-generator', label: '🧭 Paths Generator' },
-      { id: 'batch-copy', label: '📄 Batch Copy' },
-      { id: 'bbox-single', label: '📌 BBox (Single)' },
-      { id: 'bbox-multi', label: '📍 BBox (Multiple)' },
-      { id: 'excel-qa', label: '📊 Excel QA' },
-      { id: 'leave-calc', label: '🗓️ Leave Calculator' }
-    ],
-    about: [
-      { id: 'my-cv', label: '📄 My CV' },
-      { id: 'cv-form', label: '📝 CV Form' }
-    ]
-  };
+  tools: [
+    { id: 'folder-reporting', label: '📁 Folder Reporting' },
+    { id: 'text-counter', label: '🔤 Text Counter' },
+    { id: 'json-csv', label: '🔄 JSON to CSV' },
+    { id: 'path-generator', label: '🧭 Paths Generator' },
+    { id: 'batch-copy', label: '📄 Batch Copy' },
+    { id: 'bbox-single', label: '📌 BBox (Single)' },
+    { id: 'bbox-multi', label: '📍 BBox (Multiple)' },
+    { id: 'excel-qa', label: '📊 Excel QA' },
+    { id: 'leave-calc', label: '🗓️ Leave Calculator' }
+  ],
+  data: [
+    { id: 'dm-planning', label: '📝 DMP Planning' },
+    { id: 'dm-quality', label: '📊 Quality Check' },
+    { id: 'dm-metadata', label: '🏷️ Metadata' },
+    { id: 'dm-practices', label: '🌟 Best Practices' }
+  ],
+  about: [
+    { id: 'my-cv', label: '📄 My CV' },
+    { id: 'cv-form', label: '📝 CV Form' }
+  ]
+};
+
 
   function switchPrimary(group) {
     const secondaryLinks = document.getElementById("secondaryLinks");
@@ -1139,6 +1209,21 @@
     });
   });
 </script>
+<script>
+function generateMetadataTitle() {
+  const what = document.getElementById("metaWhat").value;
+  const source = document.getElementById("metaSource").value;
+  const where = document.getElementById("metaWhere").value;
+  const when = document.getElementById("metaWhen").value;
+
+  const title = `${what} data from ${source} in ${where} (${when}).`;
+  document.getElementById("metaTitle").innerText = title;
+
+  const title2 = `${what} data from ${source}, ${where} (${when}).`;
+  document.getElementById("meta2Title").innerText = title2;
+}
+</script>
+
 
 
 </body>
